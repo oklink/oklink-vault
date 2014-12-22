@@ -1,6 +1,6 @@
 oklink-vault
 ============
-The OKLink vault,hosted via GitHub Pages.
+The OKLink vault module,hosted via GitHub Pages.
 
 License
 ============
