@@ -1,9 +1,6 @@
 /**
  * Created by OK on 2014/9/18.
  */
-
-//OKkey = "okcoinwallet"
-
 //解决ie10以下的浏览器不支持Int32Array的问题
 if(typeof(Int32Array) == "undefined")
 {
@@ -98,6 +95,57 @@ Utils = {
     	} catch(e){
     		return false;
     	}
-    }
+    },
+    
+    createOP_ReturnScript : function(str){
+    	str = Utils.UnicodeToUTF8(str);
+    	
+    	var Utf8Code = ""
+    	for(var i = 0; i < str.length; i++){
+    		Utf8Code += str.charCodeAt(i).toString(16);
+    	}
+    	//console.log(Utf8Code);
+    	
+        var data = new Bitcoin.Buffer(Utf8Code, "hex");
+    	return Bitcoin.Script.fromChunks([Bitcoin.opcodes.OP_RETURN, data]);
+    },
+    
+    UnicodeToUTF8 : function (str){
+    	var out, i, len, c;
 
+        out = "";
+        len = str.length;
+        for(i = 0; i < len; i++) {
+	        c = str.charCodeAt(i);
+	        if ((c >= 0x0001) && (c <= 0x007F)) {
+	            out += str.charAt(i);
+	        } else if (c > 0x07FF) {
+	            out += String.fromCharCode(0xE0 | ((c >> 12) & 0x0F));
+	            out += String.fromCharCode(0x80 | ((c >>  6) & 0x3F));
+	            out += String.fromCharCode(0x80 | ((c >>  0) & 0x3F));
+	        } else {
+	            out += String.fromCharCode(0xC0 | ((c >>  6) & 0x1F));
+	            out += String.fromCharCode(0x80 | ((c >>  0) & 0x3F));
+	        }
+        }
+        return out;
+    },
+    getBinaryIndex : function(value,bit){
+	     var remainder = 0;
+	     for (var i = 0; i < bit; i++) {
+	       var factor = value / 2;
+	       factor=parseInt(factor);
+	       remainder = value % 2;
+	       if (factor == 0) {
+	         if (i >= bit - 1) break;
+	         remainder = 0;
+	         
+	         break;
+	       }
+	       value = factor;
+	     }
+    	 return remainder;
+    	   
+    }
+    
 }

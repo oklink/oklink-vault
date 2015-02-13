@@ -5,6 +5,7 @@ module.exports = {
   convert: require('./convert'),
   crypto: require('./crypto'),
   CryptoJS: require('./crypto-js'),
+  Buffer: require('./buffer').Buffer,
   ecdsa: require('./ecdsa'),
   ECKey: require('./eckey'),
   ECPubKey: require('./ecpubkey'),
@@ -20,7 +21,7 @@ module.exports = {
   Wallet: require('./wallet')
 }
 
-},{"./address":79,"./bufferutils":80,"./convert":81,"./crypto":82,"./crypto-js":48,"./ecdsa":83,"./eckey":84,"./ecpubkey":85,"./ecsignature":86,"./hdnode":87,"./message":88,"./networks":89,"./opcodes":90,"./script":91,"./scripts":92,"./transaction":93,"./transaction_builder":94,"./wallet":95}],1:[function(require,module,exports){
+},{"./address":79,"./bufferutils":80,"./convert":81,"./crypto":82,"./crypto-js":48,"./buffer":2,"./ecdsa":83,"./eckey":84,"./ecpubkey":85,"./ecsignature":86,"./hdnode":87,"./message":88,"./networks":89,"./opcodes":90,"./script":91,"./scripts":92,"./transaction":93,"./transaction_builder":94,"./wallet":95}],1:[function(require,module,exports){
 // http://wiki.commonjs.org/wiki/Unit_Testing/1.0
 //
 // THIS IS NOT TESTED NOR LIKELY TO WORK OUTSIDE V8!

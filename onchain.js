@@ -4,7 +4,7 @@ function advancedSetup() {
 	document.getElementById("multipleSignStyle").className = "signStyle floatLeft cur";
 	document.getElementById("sigleSignStyle").style.display = "";
 	document.getElementById("advancedSetupBlock").style.display = "none";
-	document.getElementById("signSubmitStyle").className = "submitBody_backup";
+	//document.getElementById("signSubmitStyle").className = "submitBody_backup";
 }
 function changeSignNameStyle(type) {
 	if(!signTypeSetting){
@@ -30,18 +30,16 @@ function getUserSalt(){
 			"dataType" : "text",
 			"success" : function(data){
 				if(data == -1){
-					alert("获取加盐密码失败！");
+					okcoinAlert(languageJson['languageJson']);
 					userSalt = false;
 				} else {
 					userSalt = data;
 				}
 			}
 		})
-	} else {
-		console.log("userSalt has existed !")
 	}
 	if(!userSalt){
-		throw "获取加盐密码失败！";
+		throw languageJson['languageJson'];
 	}
 	return userSalt;
 }
@@ -108,11 +106,11 @@ function getVaultType(){
 
 function validateVaultName(nameId, tipsId) {
 	var vaultName = $.trim($('#' + nameId).val());
-	//校验保险柜名称  不多于20个字符  且不重复
+	//校验保险柜名称  不多于10个字符  且不重复
 	if (vaultName == ""){
 		$('#' + tipsId).text(languageJson['valutnameisnull']);
 		return false;
-	} else if(vaultName.length > 20) {
+	} else if(vaultName.length > 10) {
 		$('#' + tipsId).text(languageJson['vaultnaetoolong']);
 		return false;
 	}
@@ -122,7 +120,7 @@ function validateVaultName(nameId, tipsId) {
 	if(vaultName.match(regexp)){
 		
 	} else {
-		$('#' + tipsId).text("保险柜名称不能包含特殊字符！");
+		$('#' + tipsId).text(languageJson['vaultIllegalCharater']);
 		return;
 	}
 	
@@ -136,7 +134,7 @@ function validateVaultName(nameId, tipsId) {
 			 "contentType": "application/x-www-form-urlencoded; charset=UTF-8",
 			 'success' : function(data){
 					if(data > 0) {
-						$('#' + tipsId).text('此保险柜名称已存在！');
+						$('#' + tipsId).text(languageJson['vaultNameExist']);
 					} else {
 						existed = false;
 					}
@@ -147,67 +145,76 @@ function validateVaultName(nameId, tipsId) {
 }
 
 function createVault() {
-	var vaultName = $.trim($('#vaultName').val());
-	var legal = validateVaultName("vaultName", "safeNameErrorTips");
-	
-	if(!legal){
-		return;
-	}
-
 	try{
-		var ecKey = Bitcoin.ECKey.makeRandom();
-	} catch(e){
-		okcoinAlert(languageJson["ie11notsupport"]);
-		throw e;
+		setButtonInProcess('createBtn');
+		var vaultName = $.trim($('#vaultName').val());
+		var legal = validateVaultName("vaultName", "safeNameErrorTips");
+		if(!legal){
+			throw "okException: illegalVaultName";
+		}
+		
+		try{
+			var ecKey = Bitcoin.ECKey.makeRandom();
+		} catch(e){
+			okcoinAlert(languageJson['ie11notsupport']);
+			throw "okException: ie11notsupport";
+		}
+
+		var password = '';
+		if(isVaultExist) {
+			password = $('#existedPassword').val();
+		} else {
+			password = $('#password').val();
+		}
+		
+		var userSalt = getUserSalt();
+		password += userSalt;
+		password = Bitcoin.CryptoJS.MD5(password).toString();
+		
+		//加密后的私钥，若包含"/"等特殊字符，将被转码
+		var encrytedPrivateKey = Utils.AesEncrypt(ecKey.toWIF(), password).toString();
+		encrytedPrivateKey = encodeURIComponent(encrytedPrivateKey);
+		var publicKey = ecKey.pub.toHex();
+		var safeCabinetType = getVaultType();
+		var multiSignMax = 1;
+		var multiSignMin = 1;
+		if(safeCabinetType == 2){
+			 multiSignMax = 2;
+			 multiSignMin = 2;
+		}
+		
+		$.post('/onchain/vault/createVault.do',
+				{
+					'alias' : vaultName,
+					'multiSignMax' : multiSignMax,
+					'multiSignMin' : multiSignMin,
+					'privateKey' : encrytedPrivateKey,
+					'publicKey' : publicKey,
+					'default' : !isVaultExist
+				},
+				function(data){
+					data = JSON.parse(data)
+					data = data.resultCode;
+					if ( data >= 0) {
+						if(isVaultExist){
+							window.location.href = "/onchain/vault/showVaults.do"
+						} else {
+							window.location.href = "/onchain/index.do"
+						}
+					} else {
+						$('#safeNameErrorTips').text(languageJson['vaultCreateFail']);
+						setButtonFinish('createBtn', languageJson['finish']);
+					}
+				}
+		);
+	}catch(e){
+		setButtonFinish('createBtn', languageJson['finish']);
+		if(e.toString().indexOf("okException") == -1){
+			okcoinAlert(languageJson['clickError']);
+		}
+		console.log(e.toString());
 	}
 
-	var password = '';
-	if(isVaultExist) {
-		password = $('#existedPassword').val();
-	} else {
-		password = $('#password').val();
-	}
-	
-	var userSalt = getUserSalt();
-	password += userSalt;
-	password = Bitcoin.CryptoJS.MD5(password).toString();
-	
-	//加密后的私钥，若包含"/"等特殊字符，将被转码
-	var encrytedPrivateKey = Utils.AesEncrypt(ecKey.toWIF(), password).toString();
-	encrytedPrivateKey = encodeURIComponent(encrytedPrivateKey);
-	var publicKey = ecKey.pub.toHex();
-	var safeCabinetType = getVaultType();
-	var multiSignMax = 1;
-	var multiSignMin = 1;
-	if(safeCabinetType == 2){
-		 multiSignMax = 2;
-		 multiSignMin = 2;
-	}
-	
-	$.post('/onchain/vault/createVault.do',
-			{
-				'alias' : vaultName,
-				'multiSignMax' : multiSignMax,
-				'multiSignMin' : multiSignMin,
-				'privateKey' : encrytedPrivateKey,
-				'publicKey' : publicKey,
-				'default' : !isVaultExist
-			},
-			function(data){
-				data = JSON.parse(data)
-				data = data.resultCode;
-				if ( data >= 0) {
-					if(isVaultExist){
-						window.location.href = "/onchain/vault/showVaults.do"
-					} else {
-						window.location.href = "/onchain/index.do"
-					}
-				} else {
-					$('#safeNameErrorTips').text('保险柜创建失败！');
-				}
-			}
-	);
-	
 }
 
 function validatePassword(inputId, tipsId, checkOldpw){
@@ -319,7 +326,7 @@ function isPasswordCorrect(inputId, tipsId, vaultId, multiSign) {
 		}
 		return result;
 	} else {
-		$('#' + tipsId).text('保险柜密码错误，请重新输入！')
+		$('#' + tipsId).text(languageJson['onchainpwderror'])
 	}
 	return correct;
 }
@@ -336,7 +343,7 @@ function generateBackupWords(inputId, tipsId) {
 			var pw = $('#' + inputId).val();
 			var backupWords = encryptPassword(pw);
 			if(!backupWords) {
-				$('#' + tipsId).text("保险柜密码加密失败！");
+				$('#' + tipsId).text(languageJson['vaultPWDCrptoFail']);
 				return;
 			}
 			$('#backupWords').text(backupWords);
@@ -371,27 +378,62 @@ function quickPayNextStep(){
 		return;
 	}
 	
+	//判断全局单位是否为mbtc,mltc
+	var isMilliUnit = $('#isMilliUnit').val() == 1;
+	
+	//检查留言
+	var remark = $.trim($("#remark").val());
+	var remarkToBlock = $("#remarkToBlock").attr("checked");
+	if(remarkToBlock){
+		if(remark == ""){
+			okcoinAlert(languageJson['leaveMessage']);
+			return;
+		}
+		try{
+			var opReturn = Utils.createOP_ReturnScript(remark);
+		}catch(e){
+			okcoinAlert(languageJson['illegalMessage']);
+			return;
+		}
+		
+		if(opReturn.buffer.length > 40){
+			okcoinAlert(languageJson['blockMessageTooLong']);
+			return;
+		}
+	} else if(remark.length > 200){
+		okcoinAlert(languageJson['messageTooLong']);
+		return;
+	}
+
 	var orderAmount = parseFloat($('#orderAmount').val());
+	//判断全局单位是否为mbtc,mltc
+	if (isMilliUnit) {
+		orderAmount = orderAmount / 1000.0;
+	}
 	var $selectedVault = $('#selectVault').find("option:selected");
 	var coinType = $("#orderAmountType").val();
 	//检查手续费
 	var minerFee = parseFloat($('#minerFee').val());
+	//判断全局单位是否为mbtc,mltc
+	if (isMilliUnit) {
+		minerFee = minerFee / 1000.0;
+	}
 	if(isNaN(minerFee) || (coinType == 0 && minerFee < 0.0001) || (coinType == 1 && minerFee < 0.001)){
-		okcoinAlert("请输入有效的手续费！");
+		okcoinAlert(languageJson['noCorrectMinerFee'],null,null,languageJson['confirmbut']);
 		return;
 	}
-	var total = orderAmount + minerFee;
+	var total = (orderAmount + minerFee).toFixed(8);
 	//检查余额 
 	var sourceAddr = $selectedVault.val();
 	if(mode == "simpleMode") {
 		if(coinType == 0){
-			if(total > maxBtc){
-				okcoinAlert("保险柜比特币余额不足！");
+			if(total > totalBtc){
+				okcoinAlert(languageJson['vaultBtcNoEnough']);
 				return;
 			}
 		} else {
-			if(total > maxLtc){
-				okcoinAlert("保险柜莱特币余额不足！");
+			if(total > totalLtc){
+				okcoinAlert(languageJson['vaultLtcNoEnough']);
 				return;
 			}
 		}
@@ -401,20 +443,19 @@ function quickPayNextStep(){
 		if(coinType == 0){
 			var btc = parseFloat($selectedVault.attr("btcAmount"))
 			if(total > btc){
-				okcoinAlert("保险柜比特币余额不足！");
+				okcoinAlert(languageJson['vaultBtcNoEnough']);
 				return;
 			}
 		} else {
 			var ltc = parseFloat($selectedVault.attr("LtcAmount"))
 			if(total > ltc){
-				okcoinAlert("保险柜莱特币余额不足！");
+				okcoinAlert(languageJson['vaultLtcNoEnough']);
 				return;
 			}
 		}
 	    
 		$('#sourceVault').text($selectedVault.text());
 		$('#vaultOfChange').text($('#selectVaultOfChange').find("option:selected").text());
-		
 		$('#payFrom').show();
 		$('#changesTo').show();
 	}
@@ -432,12 +473,12 @@ function quickPayNextStep(){
 		//校验输入的目的地址
 		var targetAddr = $.trim($('#targetAddress').val());
 		if(!Utils.isValidCoinAddress(targetAddr)){
-			okcoinAlert("请输入有效的" + typeStr + "地址！");
+			okcoinAlert(languageJson['pleaseEnter'] + typeStr + languageJson['address']);
 			return;
 		}
 		
 		if(sourceAddr == targetAddr){
-			okcoinAlert("源保险柜地址和目的地址不能一样！");
+			okcoinAlert(languageJson['illegalSameFromAndTargetAddress']);
 			return;
 		}
 
@@ -446,10 +487,10 @@ function quickPayNextStep(){
 	
 	$('#quickpay').hide();
 	$('#confirmDiv').show();
-	$('#title').text('确认付款');
+	$('#title').text(languageJson['confirmPay']);
 	$('#advancedLink').hide();
 
-	$('#totalCoin').text(orderAmount + typeStr + " + " + minerFee + typeStr +"网络手续费")
+	$('#totalCoin').text((isMilliUnit ? orderAmount*1000 : orderAmount) + (isMilliUnit ? "m" : "") + typeStr + " + " + (isMilliUnit ? minerFee*1000 : minerFee) + (isMilliUnit ? "m" : "") + typeStr +languageJson["netfee"])
 }
 
 
@@ -457,9 +498,9 @@ function checkPasswordFormat(inputId, tipsId){
 	if(!validatePassword(inputId, tipsId)){
 		var tips = "";
 		if($.trim($('#' + inputId).val()) == ""){
-			tips = "请输入保险柜密码！"
+			tips = languageJson['entervaultpwd'];
 		} else {
-			tips = "保险柜密码错误，请重新输入！";
+			tips = languageJson['onchainpwderror'];
 		}
 		$('#' + tipsId).text(tips).show();
 		return false;
@@ -470,38 +511,104 @@ function checkPasswordFormat(inputId, tipsId){
 }
 
 function clickToPay(){
+	try{
+		handlePayment();
+	} catch(e){
+		handlePayException(e)
+	}
+}
+
+function handlePayException(err){
+	setButtonFinish('submitBtn', languageJson['confirm']);
+	$('#passwordErrorTips').text(languageJson['payFailTryAgain']).show();
+	console.log("Msg of Payment Exception :" + err.toString());
+}
+
+function selectVaultsToPay(type, cAmount, coinArray){
+	var vaults = [];
+	var selectedVaults = [];
+	var opts = $("#selectVault").find("option");
+	var $opt ;
+	var coinType;
+	if(type == 1){
+		coinType = "btcAmount";
+	} else if(type == 2){
+		coinType = "ltcAmount";
+	}
+	
+	opts.each(function(){
+		var v = {};
+		$opt = $(this);
+		if($opt.attr(coinType) > 0){
+			v.vid = $opt.attr("vaultId");
+			v.coin = Math.round($opt.attr(coinType) * 100000000);
+			vaults.push(v);
+		}
+	})
+	//从小到大排序
+	vaults.sort(function(a, b){
+		return a.coin - b.coin;
+	});
+	
+	for(var i = 0; i < vaults.length; i++){
+		cAmount = cAmount - vaults[i].coin;
+		selectedVaults.push(vaults[i].vid);
+		if(cAmount > 0){
+			coinArray.push(vaults[i].coin);
+		} else {
+			coinArray.push(Math.round(cAmount + vaults[i].coin));
+			break;
+		}
+	}
+	return selectedVaults;
+}
+
+function handlePayment(){
 	var inputId = "vaultPassword";
 	var tipsId = "passwordErrorTips";
 	
+	var smsInputId = "tradePwdPhoneCode";
+	var smsTip = "tradePwdPhoneCodeTip";
+	
+	//校验保险柜密码
 	if(!checkPasswordFormat(inputId, tipsId)){
 		return;
 	}
 	
-	//校验保险柜密码
 	var selectedVault = $("#selectVault").find("option:selected");
-	var vaultId = 0;
-	if(mode == "advanceMode"){
-		vaultId = selectedVault.attr("vaultId");
-	}
-	
 	var multiSignMax = parseInt(selectedVault.attr("multiSignMax"));
 	var $selectVaultOfChange = $('#selectVaultOfChange');
 	var changesAddr = "";
 	var changesVaultId = 0;
 	var coinType = parseInt($("#orderAmountType").val()) + 1;
 	var coinAmount = 0;
-	var orderAmount = Math.round(parseFloat($('#orderAmount').val()) * 100000000);
+	//判断全局单位是否为mbtc,mltc
+	var isMilliUnit = $('#isMilliUnit').val() == 1;
+	var orderAmount = parseFloat($('#orderAmount').val());
+	if (isMilliUnit) {
+		orderAmount = Math.round(orderAmount * 100000);
+	} else {
+		orderAmount = Math.round(orderAmount * 100000000);
+	}
+	
 	if( isNaN(orderAmount) ){
 		orderAmount = 0;
 	}
-	var minerFee =Math.round(parseFloat($('#minerFee').val()) * 100000000);
-	coinAmount = orderAmount + minerFee;
+	
+	var minerFee = parseFloat($('#minerFee').val());
+	if (isMilliUnit) {
+		minerFee = Math.round(minerFee * 100000);
+	} else {
+		minerFee = Math.round(minerFee * 100000000);
+	}
+	
+	coinAmount = Math.round(orderAmount + minerFee);
 	
 	var checkSmsCode = $("#smsCodeCheck").is(":visible");
-	var smsCode = $.trim($("#smsCode").val());
+	var smsCode = $.trim($("#" + smsInputId).val());
 	if(checkSmsCode && smsCode == ""){
-		$("#smsCode").focus();
-		$("#smsCodeTip").text("请输入短信验证码").addClass("errorCueContent")
+		$("#" + smsInputId).focus();
+		$("#" + smsTip).text(languageJson["numberCodeNull"]).addClass("securitylayererror")
 		return;
 	}
 	
@@ -509,122 +616,159 @@ function clickToPay(){
 	var googleCode = $.trim($("#googleCode").val());
 	if(checkGoogleCode && googleCode == ""){
 		$("#googleCodeTip").focus();
-		$("#googleCodeTip").text("请输入谷歌验证码").addClass("errorCueContent")
+		$("#googleCodeTip").text(languageJson['pleaseentergooglecode']).addClass("securitylayererror")
 		return;
 	}
 	
 	if(!checkSmsCode && !checkGoogleCode){
-		okcoinAlert("未开启二次验证！")
+		okcoinAlert(languageJson['noEnableVerify'])
 		return;
 	}
 	
 	setButtonInProcess('submitBtn');
 	
+	var vaultId = 0;
+	var vaultIdsArr;
+	var coinsOfeachVaults = [];
+	if(mode == "simpleMode"){
+		//选择保险柜
+		vaultIdsArr = selectVaultsToPay(coinType, coinAmount, coinsOfeachVaults);
+	}else if(mode == "advanceMode"){
+		vaultId = selectedVault.attr("vaultId");
+		vaultIdsArr = [vaultId];
+		coinsOfeachVaults = [coinAmount];
+	}
+	
 	$.ajax({
 		"url" : "/onchain/pay/chooseBitcoinInputs.do",
 		"data" : {
-			"money" : Math.round(coinAmount),
-			"vault_id" : vaultId,
+			"vault_id" : vaultIdsArr.join(","),
+			"coinsOfeachVaults" : coinsOfeachVaults.join(","),
 			"coin_type" : coinType
 		},
-		success : function(inputsString){
-			var inputs = null;
-			if(inputsString != null && inputsString != "null"){
-				inputs = eval("(" + inputsString + ")");
-			}
-			if(inputs != null){
-				 if(inputs instanceof Array) {
-					 if(inputs.length > 0){
-						 if(mode == "simpleMode"){
-							 vaultId = inputs[0].vaultid;
-							 changesAddr = inputs[0].addressTo;
-							 changesVaultId = vaultId;
-						 } else {
-							 changesAddr = $selectVaultOfChange.val();
-							 changesVaultId = $selectVaultOfChange.find("option:selected").attr("vaultId");
-						 }
-					 }
-				 } else {
-					 okcoinAlert("获取input交易失败，用户未登录。 返回信息： " + inputs);
-					 setButtonFinish('submitBtn', languageJson['confirm']);
-					 return ;
-				 }
-			 } else {
-				 okcoinAlert('保险柜余额不足！');
-				 setButtonFinish('submitBtn', languageJson['confirm']);
+		success : function(data){
+			if(data < 0){
+				if(data == -3){
+					okcoinAlert(languageJson['vaultBalanceNoEnough']);
+				} else {
+					okcoinAlert(languageJson['getInputTxFail'] + data);
+				}
+				 setButtonFinish('submitBtn', languageJson['confirmbut']);
 				 return;
-			 }
+			}
 			
-			try{
-				  //取userSalt可能会抛异常
-				  var result = isPasswordCorrect(inputId, tipsId, vaultId, multiSignMax);
-				  if(!result) {
-					$('#' + tipsId).text('保险柜密码错误，请重新输入！').show();
-					throw "Password is invalid";
-				  } else {
-					$('#' + tipsId).hide();
-				  }
-			  } catch(e){
-				  	$('#' + tipsId).text('密码校验失败，请重试！').show();
-				  	setButtonFinish('submitBtn', languageJson['confirm']);
-			    	return;
-			  }finally{
-				  
-			  }
+			var resultInfo = eval("(" + data + ")");
+			var inputs = resultInfo.tranList;
+			var vaultInfos = resultInfo.vaultInfo;
+			
+			if(mode == "simpleMode"){
+				 // 多个保险柜时，找零放到最后一个保险柜中，其它保险柜金额置0。
+				 vaultId = inputs[inputs.length - 1].vaultid;
+				 changesAddr = inputs[inputs.length - 1].addressTo;
+				 changesVaultId = vaultId;
+			 } else {
+				 changesAddr = $selectVaultOfChange.val();
+				 changesVaultId = $selectVaultOfChange.find("option:selected").attr("vaultId");
+			 }
 			
 			//构建交易单，签名
-			var txBuilder = new Bitcoin.TransactionBuilder();
-			var totalInput = 0;
-			for(var i in inputs){
-				 	txBuilder.addInput(inputs[i].txid, inputs[i].index);
-					totalInput += parseInt(inputs[i].amount);
-			}
-			 
-			 var targetAddress = "";
-			 if(targetAddressType == "wallet"){
-				targetAddress = $('#selectWallet').val();
-			  } else if(targetAddressType == "address") {
-				targetAddress = $.trim($('#targetAddress').val());
-			 }
-			 
-			 txBuilder.addOutput(targetAddress, orderAmount);
-			 //找零
-			 var changes = totalInput - coinAmount;
-			 if(changes > 0){
-				 txBuilder.addOutput(changesAddr, changes);
-			}
+			  try{
+				  	var txBuilder = new Bitcoin.TransactionBuilder();
+					var totalInput = 0;
+					for(var i in inputs){
+						txBuilder.addInput(inputs[i].txid, inputs[i].index);
+						totalInput += parseInt(inputs[i].amount);
+					}
+					
+					 var targetAddress = "";
+					 if(targetAddressType == "wallet"){
+						targetAddress = $('#selectWallet').val();
+					  } else if(targetAddressType == "address") {
+						targetAddress = $.trim($('#targetAddress').val());
+					 }
+					 
+					txBuilder.addOutput(targetAddress, orderAmount);
+					//找零
+					var changes = totalInput - coinAmount;
+					if(changes > 0){
+						 txBuilder.addOutput(changesAddr, changes);
+					}
+					
+					var remark = $.trim($("#remark").val());
+					var remarkToBlock = $("#remarkToBlock").attr("checked");
+					if(remark != "" && remarkToBlock){
+						txBuilder.addOutput(Utils.createOP_ReturnScript(remark), 0);
+					}
+					
+					var password = $('#' + inputId).val();
+					userSalt = resultInfo["userSalt"];
+					password += userSalt;
+					password = Bitcoin.CryptoJS.MD5(password).toString();
+					
+					var signatures = {};
+					var maxSign = 1;
+					var tran_vault_id = "";
+					var vault_key = {};
+					for(var i in inputs){
+						var cur_vault_id = inputs[i].vaultid;
+						tran_vault_id += "," + cur_vault_id;
+						var privateKey = vault_key[cur_vault_id + "_key"];
+						var redeemScript = vault_key[cur_vault_id + "_redeem"];
+						if(privateKey == undefined || privateKey == null){
+							privateKey = vaultInfos[cur_vault_id].privateKey;
+							redeemScript = vaultInfos[cur_vault_id].redeemScript;
+							if(redeemScript != undefined){
+								 if(redeemScript != ""){
+									 redeemScript = Bitcoin.Script.fromHex(redeemScript);
+									 maxSign = 2;
+								 } else {
+									 redeemScript = undefined;
+								 }
+							}
+							
+							try{
+								var decrypt = Utils.AesDecrypt(privateKey, password);
+								privateKey = decrypt.toString(Bitcoin.CryptoJS.enc.Utf8);
+								if(privateKey == ""){
+									throw "wrongPassword"
+								}
+								privateKey = Bitcoin.ECKey.fromWIF(privateKey);
+							}catch(e){
+								$('#' + tipsId).text(languageJson['pwdVerifyFailTryAgain']).show();
+							  	setButtonFinish('submitBtn', languageJson['confirm']);
+						    	return;
+							}
 
-			 var signatures = {};
-			 //sign
-			 var privateKey = result["privateKey_en"];
-			 privateKey = Bitcoin.ECKey.fromWIF(privateKey);
+							vault_key[cur_vault_id + "_key"] = privateKey;
+							vault_key[cur_vault_id + "_redeem"] = redeemScript;
+						}
+						
+						txBuilder.sign(i, privateKey, redeemScript);
+						if(redeemScript != undefined){
+							signatures[i] = txBuilder.signatures[i].signatures[0].toDER().toString("hex");
+						} else {
+							signatures[i] = "null";
+						}
+					}
+					 
+					 var tx = null;
+					 if(maxSign == 1){
+						 tx = txBuilder.build();
+					 } else if(maxSign >1 ) {
+						 tx = txBuilder.buildIncomplete();
+					 }
+					 
+					 var txHex = tx.toHex();
+					 var txid = tx.getId();
+			  }catch(e){
+				  handlePayException(e);
+				  return;
+			  }
 
-			 var redeemScript = result["redeemscript"];
-			 if(redeemScript != undefined){
-				 if(redeemScript != ""){
-					 redeemScript = Bitcoin.Script.fromHex(redeemScript);
-				 } else {
-					 redeemScript = undefined;
-				 }
-			 }
-			 for(var i = 0; i < txBuilder.tx.ins.length ; i++){
-				 txBuilder.sign(i, privateKey, redeemScript);
-				 signatures[i] = txBuilder.signatures[i].signatures[0].toDER().toString("hex");
-			 }
-			 
-			 var tx = null;
-			 if(multiSignMax == 1){
-				 tx = txBuilder.build();
-			 } else if(multiSignMax >1 ) {
-				 tx = txBuilder.buildIncomplete();
-			 }
-			 
-			 var txHex = tx.toHex();
-			 var txid = tx.getId();
 			  $.post(
 				   "/onchain/pay/handlePayOrder.do",
 				   {
-					  "inputTrans" :  encodeURIComponent(inputsString),
+					  "inputTrans" :  encodeURIComponent(JSON.stringify(inputs)),
 					  "tran" :  encodeURIComponent(JSON.stringify({
 						  "txid" : txid,
 						  "coinType" : coinType,
@@ -632,38 +776,41 @@ function clickToPay(){
 						  "addressTo" : targetAddress,
 						  "fee" : minerFee,
 						  "amount" : orderAmount,
-						  "comments" : $("#remark").val(),
+						  "comments" : remark,
 						  "changeMoney" : changes,
 						  "changeVaultId" : changesVaultId
 					  })),
 					  "preTransaction" : txHex,
 					  "partSignatures" : encodeURIComponent(JSON.stringify(signatures)),
 					  "googleCode" : googleCode,
-					  "phoneCode" : smsCode
+					  "phoneCode" : smsCode,
+					  "vault_id" : vaultIdsArr.join(","),
+					  "coinsOfeachVaults" : coinsOfeachVaults.join(",")
 				  },
 				  function(data){
 					  var result = JSON.parse(data);
 					  if(result.resultCode == 0){
 						  var paramsJson = {};
-						  paramsJson.txid = txid;
 						  paramsJson.targetAddr = targetAddress;
 						  paramsJson.coin = orderAmount/100000000;
 						  paramsJson.coinType = coinType;
 						  paramsJson.id = result.objectId;
-						  
+						  if(multiSignMax >1 ){
+							  paramsJson.txid = result.objectCode;
+						  } else {
+							  paramsJson.txid = txid;
+						  }
+
 						  window.location.href="/onchain/pay/paySuccess.do?" + $.param(paramsJson);
 					  } else {
-						  var smsInputId = "smsCode";
-						  var smsTip = "smsCodeTip";
 						  var googleInpuId = "googleCode";
 						  var googleTip = "googleCodeTip";
 						  if(result.resultCode == -17||result.resultCode == -18||result.resultCode == -19){
-								okcoinTipAlert(smsInputId, smsTip, result);
+								okcoinTipAlert(smsInputId, smsTip, result, "securitylayererror");
 						  }else if(result.resultCode == -20||result.resultCode == -21||result.resultCode == -22||result.resultCode == -23){
-								okcoinTipAlert(googleInpuId, googleTip, result);
+								okcoinTipAlert(googleInpuId, googleTip, result, "securitylayererror");
 						  }else{
-								okcoinTipAlert(smsInputId, smsTip, result);
-								$("#" + smsTip).text("付款操作失败，请重试！")
+								$('#' + tipsId).text(languageJson['payFailTryAgain']).show();
 						  }
 						  setButtonFinish('submitBtn', languageJson['confirm']);
 					  }
@@ -673,7 +820,7 @@ function clickToPay(){
 
 		},
 		"error" : function(data){
-			okcoinAlert("付款失败，请重试！");
+			okcoinAlert(languageJson['payFailTryAgain']);
 			setButtonFinish('submitBtn', languageJson['confirm']);
 		}
 	});
